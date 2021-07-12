@@ -1,0 +1,74 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gcr-registry-svc
+  namespace: container-basis
+  labels:
+    run: gcr-registry
+spec:
+  selector:
+    app: gcr-registry
+  ports:
+    - protocol: TCP
+      port: 5000
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: registry-ingress
+  namespace: container-basis
+  annotations:
+    kubernetes.io/ingress.class: "traefik"
+spec:
+  rules:
+  - host: gcr-k3s.io
+    http:
+      paths:
+      - path: /
+        pathType: ImplementationSpecific
+        backend:
+          service: 
+            name: gcr-registry-svc
+            port:
+              number: 5000
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gcr-registry
+  namespace: container-basis
+  labels:
+    app: gcr-registry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gcr-registry
+  template:
+    metadata:
+      labels:
+        app: gcr-registry
+    spec:
+      containers:
+      - name: gcr-registry
+        image: yangchuansheng/registry-proxy:latest
+        ports:
+        - containerPort: 5000
+          protocol: TCP
+        volumeMounts:
+        - name: local
+          mountPath: /hub
+        env:
+        - name: REGISTRY_HTTP_ADDR
+          value: :5000
+        - name: REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY
+          value: /hub
+        - name: PROXY_REMOTE_URL
+          value: https://gcr.io
+      volumes:
+      - name: local
+        persistentVolumeClaim:
+          claimName: local-path-pvc

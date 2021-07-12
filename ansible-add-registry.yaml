@@ -1,0 +1,45 @@
+- hosts: k3s
+  remote_user: ep
+  become: yes
+  gather_facts: False
+  vars_prompt:
+  - name: "registryIP"
+    prompt: "Please input Registry Server IP"
+    private: no
+  tasks:
+    - name: add hosts
+      when: registryIP is defined
+      shell: |
+        sudo sed -i '/^.*hub-k3s\.io.*/d' /etc/hosts
+        sudo echo "{{ registryIP }}  hub-k3s.io      gcr-k3s.io        k8s-gcr-k3s.io" >> /etc/hosts
+    - name: add remote private registry
+      when: registryIP is defined
+      shell: |
+        ls -als /etc/rancher/k3s/registries.yaml > /dev/null 2>&1 || sudo mkdir /etc/rancher/k3s/
+        sudo echo > /etc/rancher/k3s/registries.yaml
+        sudo cat <<EOT >> /etc/rancher/k3s/registries.yaml
+        mirrors:
+          docker.io:
+            endpoint:
+              - "http://hub-k3s.io"
+          gcr.io:
+            endpoint:
+              - "http://gcr-k3s.io"
+          k8s.gcr.io:
+            endpoint:
+              - "http://k8s-gcr-k3s.io"
+        EOT
+
+- hosts: k3s-master
+  remote_user: ep
+  become: yes
+  tasks:
+    - name: restart server
+      shell: sudo systemctl restart k3s
+
+- hosts: k3s-workers
+  remote_user: ep
+  become: yes
+  tasks:
+    - name: restart workers
+      shell: sudo systemctl restart k3s-agent
